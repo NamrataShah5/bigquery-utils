@@ -1,4 +1,11 @@
-/* Public BigQuery Audit View, author: Namrata Shah */
+/*
+ * Script: BQ Audit Version 2
+ * Author: NamrataShah5
+ * Description:
+ * This SQL Script creates a materialized source table based on the newer BigQueryAuditMetadata
+ * stackdriver logs. This script acts as input to the Dashboard.
+ * Reference for BigQueryAuditMetadata: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata
+ */
  WITH query_audit AS (
     SELECT
       protopayload_auditlog.authenticationInfo.principalEmail AS principalEmail,
@@ -651,7 +658,7 @@
       COALESCE(
         CONCAT(
           SPLIT(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, $.tableCreation.jobName'),
+            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, '$.tableCreation.jobName'),
               "/")[SAFE_OFFSET(1)], 
           ":",
           SPLIT(
@@ -1144,9 +1151,9 @@ SELECT
   totalViewsProcessed,
   totalProcessedBytes,
   totalBilledBytes,
-  (totalBilledBytes / 1000000000) AS totalBilledGigabytes,
-  (totalBilledBytes / 1000000000) / 1000 AS totalBilledTerabytes,
-  ((totalBilledBytes / 1000000000) / 1000) * 5 AS estimatedCostUsd,
+  (totalBilledBytes / pow(2,30)) AS totalBilledGigabytes,
+  (totalBilledBytes / pow(2,40)) AS totalBilledTerabytes,
+  (totalBilledBytes / pow(2,40)) * 5 AS estimatedCostUsd,
   billingTier,
   CONCAT(querydestTable_dataset_id, '.', querydestTable_table_id) AS queryDestinationTableRelativePath,
   CONCAT(querydestTable_project_id, '.', querydestTable_dataset_id, '.', querydestTable_table_id) AS queryDestinationTableAbsolutePath,
