@@ -3,17 +3,16 @@
  * Author: NamrataShah5
  * Description:
  * This SQL Script creates a materialized source table based on the newer BigQueryAuditMetadata
- * stackdriver logs. This script acts as input to the Dashboard.
+ * stackdriver logs. This script acts AS input to the Dashboard.
  * Reference for BigQueryAuditMetadata: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata
  */
  WITH query_audit AS (
     SELECT
-      protopayload_auditlog.authenticationInfo.principalEmail AS principalEmail,
-      resource.labels.project_id,
-      JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, '$.requestMetadata.callerIp') AS callerIp,
-      protopayload_auditlog.serviceName AS serviceName,
-      protopayload_auditlog.methodName AS methodName,
+      protopayload_auditlog.authenticationInfo.principalEmail,
       resource.labels.project_id AS projectId,
+      JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, '$.requestMetadata.callerIp') AS callerIp,
+      protopayload_auditlog.serviceName,
+      protopayload_auditlog.methodName,
       COALESCE(
         CONCAT(
           SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, '$.jobChange.job.jobName'),"/")[SAFE_OFFSET(1)],
@@ -26,10 +25,12 @@
           SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, '$.jobInsertion.job.jobName'),"/")[SAFE_OFFSET(3)]
         )
       ) AS jobId,
-      /* All queries related to jobStats
-      https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#jobstats */
+      /*
+       * All queries related to jobStats
+       * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#jobstats
+       */
       JSON_EXTRACT_SCALAR(
-       protopayload_auditlog.metadataJson,'$.jobChange.job.jobStats.parentJobName') as parentJobName,
+       protopayload_auditlog.metadataJson,'$.jobChange.job.jobStats.parentJobName') AS parentJobName,
       COALESCE(
         TIMESTAMP(JSON_EXTRACT_SCALAR(
          protopayload_auditlog.metadataJson,'$.jobInsertion.job.jobStats.createTime')),
@@ -102,22 +103,16 @@
         ) AS totalSlotMs,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.reservationUsage'),
-        JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.reservationUsage')
-      ) AS reservationUsage,
-      COALESCE(
-        JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStats.reservationUsage.name'),
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStats.reservationUsage.name')
-      ) AS name,
+      ) AS reservationUsageName,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStats.reservationUsage.slotMs'),
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStats.reservationUsage.slotMs')
-      ) AS slotMs,
+      ) AS reservationUsageSlotMs,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStats.queryStats.totalProcessedBytes'),
@@ -144,25 +139,7 @@
             '$.jobInsertion.job.jobStats.queryStats.referencedTables'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobChange.job.jobStats.queryStats.referencedTables')),
-          '["'),'"]'),'","') as referencedTables,
-      COALESCE(
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.queryStats.referencedTables'),"/")[SAFE_OFFSET(1)],
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.queryStats.referencedTables'),"/")[SAFE_OFFSET(1)]
-      ) AS refTable_project_id,
-      COALESCE(
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.queryStats.referencedTables'),"/")[SAFE_OFFSET(3)],
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.queryStats.referencedTables'),"/")[SAFE_OFFSET(3)]
-      ) AS refTable_dataset_id,
-      COALESCE(
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.queryStats.referencedTables'),"/")[SAFE_OFFSET(5)],
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.queryStats.referencedTables'),"/")[SAFE_OFFSET(5)]
-      ) AS refTable_table_id,
+          '["'),'"]'),'","') AS referencedTables,
       ARRAY_LENGTH(SPLIT(
         COALESCE(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
@@ -177,25 +154,7 @@
             '$.jobInsertion.job.jobStats.queryStats.referencedViews'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobChange.job.jobStats.queryStats.referencedViews')),
-          '["'),'"]'),'","') as referencedViews,
-      COALESCE(
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.queryStats.referencedViews'),"/")[SAFE_OFFSET(1)],
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.queryStats.referencedViews'),"/")[SAFE_OFFSET(1)]
-      ) AS refView_project_id,
-      COALESCE(
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.queryStats.referencedViews'),"/")[SAFE_OFFSET(3)],
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.queryStats.referencedViews'),"/")[SAFE_OFFSET(3)]
-      ) AS refView_dataset_id,
-      COALESCE(
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobInsertion.job.jobStats.queryStats.referencedViews'),"/")[SAFE_OFFSET(5)],
-        SPLIT(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-          '$.jobChange.job.jobStats.queryStats.referencedViews'),"/")[SAFE_OFFSET(5)]
-      ) AS refView_table_id,
+          '["'),'"]'),'","') AS referencedViews,
       ARRAY_LENGTH(SPLIT(
         COALESCE(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
@@ -210,7 +169,7 @@
             '$.jobInsertion.job.jobStats.queryStats.referencedRoutines'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobChange.job.jobStats.queryStats.referencedRoutines')),
-          '["'),'"]'),'","') as referencedRoutines,
+          '["'),'"]'),'","') AS referencedRoutines,
       ARRAY_LENGTH(SPLIT(
         COALESCE(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
@@ -242,21 +201,23 @@
           '$.jobInsertion.job.jobStats.queryStats.outputRowCount'),
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStats.queryStats.outputRowCount')
-      ) as outputRowCount,
+      ) AS outputRowCount,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStats.queryStats.cacheHit'), 
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStats.queryStats.cacheHit')
-      ) as cacheHit, 
+      ) AS cacheHit,
       COALESCE(
         CAST(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStats.loadStats.totalOutputBytes') AS INT64),
         CAST(JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStats.loadStats.totalOutputBytes') AS INT64)
-      ) AS totalLoadOutputBytes,
-      /* Queries related to JobStatus
-      https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#jobstatus*/
+      ) AS loadStatsTotalOutputBytes,
+      /*
+       * Queries related to JobStatus
+       * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#jobstatus
+       */
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStatus.jobState'),
@@ -291,16 +252,18 @@
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStatus.error') 
         ),r'"message":\"(.*?)\"}'
-      ) as errorMessage,
+      ) AS errorMessage,
       REGEXP_EXTRACT_ALL(COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobStatus.error'),
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobStatus.error') 
         ),r'"code":\"(.*?)\"}'
-      ) as errorCode,
-      /* Queries related to loadConfig job
-      https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#load */
+      ) AS errorCode,
+      /*
+       * Queries related to loadConfig job
+       * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#load
+       */
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobConfig.loadConfig.sourceUrisTruncated'),
@@ -319,7 +282,7 @@
             '$.jobInsertion.job.jobStats.queryStats.sourceUris'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobChange.job.jobStats.queryStats.sourceUris')),
-          '["'),'"]'),'","') as loadSourceUris,
+          '["'),'"]'),'","') AS loadSourceUris,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobConfig.loadConfig.createDisposition'),
@@ -350,8 +313,10 @@
           '$.jobChange.job.jobConfig.loadConfig.destinationTableEncryption.kmsKeyName')
       ) AS loadkmsKeyName,
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,'$.jobInsertion.job.jobConfig.loadConfig.load'),
-      /*Queries related to queryConfig job
-      https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#query */
+      /*
+       * Queries related to queryConfig job
+       * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#query
+       */
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobConfig.queryConfig.queryTruncated'),
@@ -439,23 +404,23 @@
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobChange.job.jobConfig.queryConfig.statementType')
       ) AS statementType,
-      /* Queries related to tableCopyConfig
-      https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablecopy */
+      /*
+       * Queries related to tableCopyConfig
+       * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablecopy
+       */
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
         '$.jobInsertion.job.jobConfig.tableCopyConfig.destinationTable') AS tableCopydestinationTable, 
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-        '$.jobInsertion.job.jobConfig.createDisposition') as tableCopycreateDisposition,
+        '$.jobInsertion.job.jobConfig.createDisposition') AS tableCopycreateDisposition,
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-        '$.jobInsertion.job.jobConfig.writeDisposition') as tableCopywriteDisposition,
-      JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
-        '$.jobInsertion.job.jobConfig.tableCopyConfig') AS tableCopy,
+        '$.jobInsertion.job.jobConfig.writeDisposition') AS tableCopywriteDisposition,
       SPLIT(TRIM(TRIM(
         COALESCE(
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobInsertion.job.jobConfig.tableCopyConfig.sourceTables'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobInsertion.job.jobConfig.tableCopyConfig.sourceTables')),
-      '["'),'"]') ,'","') as tableCopysourceTables,
+      '["'),'"]') ,'","') AS tableCopysourceTables,
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
         '$.jobInsertion.job.jobConfig.tableCopyConfig.sourceTablesTruncated') AS tableCopysourceTablesTruncated,
       COALESCE(
@@ -476,15 +441,17 @@
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobConfig.tableCopyConfig.destinationTable'),
         ".")[SAFE_OFFSET(3)] AS tableCopytable_id,
-      /* Queries related to extractConfig
-      https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#extract */
+      /*
+       * Queries related to extractConfig
+       * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#extract
+       */
       SPLIT(TRIM(TRIM(
         COALESCE(
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobInsertion.job.jobConfig.extractConfig.destinationUris'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.jobInsertion.job.jobConfig.extractConfig.destinationUris')),
-          '["'),'"]'),'","') as extractdestinationUris,
+          '["'),'"]'),'","') AS extractdestinationUris,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
           '$.jobInsertion.job.jobConfig.extractConfig.destinationUrisTruncated'),
@@ -496,16 +463,18 @@
       SPLIT(
          JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
         '$.jobInsertion.job.jobConfig.extractConfig.sourceTable')
-      ,",")[SAFE_OFFSET(1)] as extract_projectid,
+      ,",")[SAFE_OFFSET(1)] AS extract_projectid,
       SPLIT(
          JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
         '$.jobInsertion.job.jobConfig.extractConfig.sourceTable')
-      ,",")[SAFE_OFFSET(3)] as extract_datasetid,
+      ,",")[SAFE_OFFSET(3)] AS extract_datasetid,
       SPLIT(
          JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
         '$.jobInsertion.job.jobConfig.extractConfig.sourceTable')
-      ,",")[SAFE_OFFSET(5)] as extract_tableid,
-      /* The following code extracts the columns specific to the Load operation in BQ */ 
+      ,",")[SAFE_OFFSET(5)] AS extract_tableid,
+      /*
+       * The following code extracts the columns specific to the Load operation in BQ
+       */
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, "$.jobChange.after") AS jobChangeAfter,
       REGEXP_EXTRACT(protopayload_auditlog.metadataJson, 
         r'BigQueryAuditMetadata","(.*?)":') AS eventName,
@@ -517,8 +486,10 @@
       ) AS querytype
     FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
   ),
-  /* Data from tableDataChange audit logs 
-  https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tabledatachange */
+  /*
+   * Data from tableDataChange audit logs
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tabledatachange
+   */
   data_audit AS (
     SELECT
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
@@ -536,13 +507,14 @@
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.tableDataChange.jobName'),
           "/")[SAFE_OFFSET(3)]
-      ) AS data_jobid
+      ) AS jobId
     FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
   ),
-  /* Data from TableCreation and TableChange audit logs
-  TableCreation: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablechange
-  TableChange: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablechange
-  */
+  /*
+   * Data from TableCreation and TableChange audit logs
+   * TableCreation: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablechange
+   * TableChange: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablechange
+   */
   table_audit AS (
     SELECT
       COALESCE(CONCAT(
@@ -566,7 +538,7 @@
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.tableChange.jobName'),
               "/")[SAFE_OFFSET(3)]
-      )) as table_jobid,
+      )) AS jobId,
       COALESCE(
         JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
           '$.tableCreation.table.tableName'),
@@ -649,12 +621,14 @@
           '$.tableChange.table.truncated')
        AS tableChangeTruncated
     FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access` ),
-  /* Data from tableDeletion audit logs
-  https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tabledeletion */
-  tableDeletion_audit as (
+  /*
+   * Data from tableDeletion audit logs
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tabledeletion
+   */
+  tableDeletion_audit AS (
     SELECT
       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-        '$.tableDeletion.table.reason') as tableDeletionReason,
+        '$.tableDeletion.table.reason') AS tableDeletionReason,
       COALESCE(
         CONCAT(
           SPLIT(
@@ -675,11 +649,13 @@
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.tableChange.jobName'),
               "/")[SAFE_OFFSET(3)]
-      )) as tableDeletion_jobid
-    FROM `project_id_.dataset_id.table_id.cloudaudit_googleapis_com_data_access`),
-   /* Data from tableDataRead audit logs 
-   https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tabledataread */
-   tableDataRead_audit as (
+      )) AS jobId
+    FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`),
+   /*
+    * Data from tableDataRead audit logs
+    * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tabledataread
+    */
+   tableDataRead_audit AS (
     SELECT
       CONCAT(
         SPLIT(
@@ -691,35 +667,36 @@
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.tableDataRead.jobName'),
               "/")[SAFE_OFFSET(3)]
-      ) as tableDataRead_jobid,
+      ) AS jobId,
       SPLIT(TRIM(TRIM(
         COALESCE(
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.tableDataRead.fields'),
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.tableDataRead.fields')),
-          '["'),'"]'),'","') as fieldsAccessed,  
+          '["'),'"]'),'","') AS fieldsAccessed,
        JSON_EXTRACT(protopayload_auditlog.metadataJson,
-            '$.tableDataRead.fieldsTruncated') as fieldsTruncated,
+            '$.tableDataRead.fieldsTruncated') AS fieldsTruncated,
        SPLIT(TRIM(TRIM(
           JSON_EXTRACT(protopayload_auditlog.metadataJson,
             '$.tableDataRead.categories'),
-          '["'),'"]'),'","') as categories,  
+          '["'),'"]'),'","') AS categories,
        JSON_EXTRACT(protopayload_auditlog.metadataJson,
-            '$.tableDataRead.categoriesTruncated') as categoriesTruncated,
+            '$.tableDataRead.categoriesTruncated') AS categoriesTruncated,
        JSON_EXTRACT(protopayload_auditlog.metadataJson,
-            '$.tableDataRead.reason') as tableDataReadReason,
+            '$.tableDataRead.reason') AS tableDataReadReason,
        JSON_EXTRACT(protopayload_auditlog.metadataJson,
-            '$.tableDataRead.sessionName') as sessionName         
-    FROM 
-    `project_id_.dataset_id.cloudaudit_googleapis_com_data_access`
+            '$.tableDataRead.sessionName') AS sessionName
+    FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
    ),
-   /* Data from modelDeletion audit logs
-   https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modeldeletion */
-   modelDeletion_audit as (
+   /*
+    * Data from modelDeletion audit logs
+    * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modeldeletion
+    */
+   modelDeletion_audit AS (
      SELECT 
        JSON_EXTRACT(protopayload_auditlog.metadataJson,
-            '$.modelDeletion.reason') as modelDeletionReason,
+            '$.modelDeletion.reason') AS modelDeletionReason,
        CONCAT(
         SPLIT(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
@@ -730,97 +707,92 @@
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.modelDeletion.jobName'),
               "/")[SAFE_OFFSET(3)]
-      ) as modelDeletion_jobid,
-     FROM `project_id_.dataset_id.cloudaudit_googleapis_com_data_access`
+      ) AS jobId,
+     FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
    ),
- model_audit as (
-     SELECT 
-       COALESCE(
-          JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-              '$.modelMetadataChange.reason'),
-          JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-              '$.modelCreation.reason')
-       ) as modelReason,
-       COALESCE(
-          CONCAT(
-            SPLIT(
-              JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                  '$.modelMetadataChange.jobName'),
-                  "/")[SAFE_OFFSET(1)], 
-            ":",
-        SPLIT(
-          JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-            '$.modelMetadataChange.jobName'),
-              "/")[SAFE_OFFSET(3)]
-       ),
-          CONCAT(
-            SPLIT(
-              JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                  '$.modelCreation.jobName'),
-                  "/")[SAFE_OFFSET(1)], 
-            ":",
-            SPLIT(
-              JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.jobName'),
-                  "/")[SAFE_OFFSET(3)]
-        ))      as model_jobid,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.modelName'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.modelName') 
-        ) as modelName,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.modelInfo.friendlyName'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.modelInfo.friendlyName') 
-        ) as modelFriendlyName,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.modelInfo.description'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.modelInfo.description') 
-        ) as modelDescription,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.modelInfo.labels'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.modelInfo.labels') 
-        ) as modelLabels,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.expireTime'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.expireTime') 
-        ) as modelExpireTime,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.createTime'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.createTime') 
-        ) as modelCreateTime,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.updateTime'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.updateTime') 
-        ) as modelUpdateTime,
-        COALESCE(
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelCreation.model.encryption.kmsKeyName'),
-            JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
-                '$.modelMetadataChange.model.encryption.kmsKeyName') 
-        ) as modelKmsKeyName,
-     FROM `project_id_.dataset_id.cloudaudit_googleapis_com_data_access`
+   /*
+    * Data from ModelMetadataChange audit logs
+    * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modelmetadatachange
+    */
+   modelMetadataChange_audit AS (
+     SELECT
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.reason') AS modelMetadataChangeReason,
+       CONCAT(
+         SPLIT(
+           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+             '$.modelMetadataChange.jobName'),
+              "/")[SAFE_OFFSET(1)],
+         ":",
+         SPLIT(
+           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+           '$.modelMetadataChange.jobName'),
+            "/")[SAFE_OFFSET(3)]
+       ) AS jobId,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.modelName') AS modelMetadataChangeModelName,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.modelInfo.entityInfo.friendlyName') AS modelMetadataChangeEntityInfoFriendlyName,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.modelInfo.entityInfo.description') AS modelMetadataChangeEntityInfoDescription,
+       JSON_EXTRACT(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.modelInfo.entityInfo.labels') AS modelMetadataChangeEntityInfoLabels,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.expireTime') AS modelMetadataChangeModelExpireTime,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.createTime') AS modelMetadataChangeModelCreateTime,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.updateTime') AS modelMetadataChangeModelUpdateTime,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelMetadataChange.model.encryption.kmsKeyName') AS modelMetadataChangeEncryptionKmsKeyName,
+     FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
    ),
-  /* Data from modelDataChange audit logs: 
-  https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modeldatachange */
-  modelDataChange_audit as (
+   /*
+    * Data from ModelCreation audit logs
+    * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modelcreation
+    */
+   modelCreation_audit AS (
+     SELECT
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.reason')  AS modelCreationReason,
+       CONCAT(
+         SPLIT(
+           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+             '$.modelCreation.jobName'),
+              "/")[SAFE_OFFSET(1)],
+         ":",
+         SPLIT(
+           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+           '$.modelCreation.jobName'),
+            "/")[SAFE_OFFSET(3)]
+       ) AS jobId,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.modelName')  AS modelCreationModelName,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.modelInfo.entityInfo.friendlyName')  AS modelCreationEntityInfoFriendlyName,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.modelInfo.entityInfo.description')  AS modelCreationEntityInfoDescription,
+       JSON_EXTRACT(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.modelInfo.entityInfo.labels')  AS modelCreationEntityInfoLabels,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.expireTime')  AS modelCreationModelExpireTime,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.createTime')  AS modelCreationModelCreateTime,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.updateTime')  AS modelCreationModelUpdateTime,
+       JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson,
+         '$.modelCreation.model.encryption.kmsKeyName')  AS modelCreationEncryptionKmsKeyName,
+     FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
+   ),
+  /*
+   * Data from modelDataChange audit logs:
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modeldatachange
+   */
+  modelDataChange_audit AS (
       SELECT
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
               '$.modelDataChange.reason')
-          as modelDataChangeReason,
+          AS modelDataChangeReason,
           CONCAT(
             SPLIT(
               JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
@@ -831,14 +803,14 @@
               JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
                 '$.modelDataChange.jobName'),
                   "/")[SAFE_OFFSET(3)]
-          ) as modelDataChange_jobid,
-      FROM `project_id_.dataset_id.cloudaudit_googleapis_com_data_access`
+          ) AS jobId,
+      FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
    ),
-   routine_audit as (
+   routine_audit AS (
       SELECT
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
               '$.routine.reason')
-          as routineReason,
+          AS routineReason,
           COALESCE(
             CONCAT(
               SPLIT(
@@ -873,7 +845,7 @@
                   '$.routineDeletion.jobName'),
                     "/")[SAFE_OFFSET(3)]
             )
-          ) as routine_jobid,
+          ) AS jobId,
         COALESCE(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.routineCreation.routine.routineName'),
@@ -881,7 +853,7 @@
             '$.routineChange.routine.routineName'),
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.routineDeletion.routine.routineName')
-        ) as routineName,
+        ) AS routineName,
         COALESCE(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.routineCreation.routine.createTime'),
@@ -889,7 +861,7 @@
             '$.routineChange.routine.createTime'),
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.routineDeletion.routine.createTime')
-        ) as routineCreateTime,
+        ) AS routineCreateTime,
         COALESCE(
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.routineCreation.routine.updateTime'),
@@ -897,8 +869,8 @@
             '$.routineChange.routine.updateTime'),
           JSON_EXTRACT_SCALAR(protopayload_auditlog.metadataJson, 
             '$.routineDeletion.routine.updateTime')
-        ) as routineUpdateTime
-      FROM `project_id_.dataset_id.cloudaudit_googleapis_com_data_access`
+        ) AS routineUpdateTime
+      FROM `project_id.dataset_id.cloudaudit_googleapis_com_data_access`
    )
 SELECT
   principalEmail,
@@ -907,39 +879,7 @@ SELECT
   methodName,
   eventName,
   tableDataChangeReason,
-  loadDestinationTable, 
-  loadKmsKeyName, 
-  loadcreateDisposition,
-  loadwriteDisposition,
-  loadschemaJson,
-  loadsourceUris,
-  loadsourceUrisTruncated,
-  loadschemaJsonTruncated,
-  query,
-  queryTruncated,
-  queryDestinationTable, 
-  queryKmsKeyName, 
-  querycreateDisposition,
-  querywriteDisposition,
-  queryschemaJson,
-  queryschemaJsonTruncated,
-  queryPriority,
   statementType,
-  extractdestinationUris,
-  extractdestinationUrisTruncated,
-  extractsourceTable,
-  extract_projectid,
-  extract_datasetid,
-  extract_tableid,
-  tableCopysourceTables,
-  tableCopydestinationTable
-  tableCopysourceTablesTruncated,
-  tableCopycreateDisposition,
-  tableCopywriteDisposition,
-  tableCopyproject_id,
-  tableCopydataset_id,
-  tableCopytable_id,
-  tableCopykmsKeyname,
   jobState,
   errorResultCode,
   errorResultMessage,
@@ -948,12 +888,10 @@ SELECT
   errorMessage,
   projectId,
   jobId,
-  data_jobid
   querytype,
   insertRowCount,
   deleteRowCount,
   outputRowCount,
-  table_jobid,
   tableName,
   tableFriendlyName,
   tableDescription,
@@ -969,29 +907,12 @@ SELECT
   tableReason,
   tableChangeTruncated,
   tableDeletionReason,
-  tableDeletion_jobid,
-  tableDataRead_jobid,
   fieldsAccessed,
   fieldsTruncated,
   categories,
   categoriesTruncated,
   tableDataReadReason,
   sessionName,
-  modelDeletionReason,
-  modelDeletion_jobid,
-  model_jobid,
-  modelReason,
-  modelName,
-  modelFriendlyName,
-  modelLabels,
-  modelCreateTime,
-  modelUpdateTime,
-  modelExpireTime,
-  modelDescription,
-  modelKmsKeyName,
-  modelDataChangeReason,
-  modelDataChange_jobid,
-  routine_jobid,
   routineReason,
   routineName,
   routineCreateTime,
@@ -1011,133 +932,19 @@ SELECT
   endTime,
   runtimeMs,
   runtimeSecs,
-  tableCopy,
-  /* This code queries data specific to the Copy operation */ 
-  CONCAT(tableCopydataset_id, '.', tableCopytable_id) 
-    AS tableCopyDestinationTableRelativePath,
-  CONCAT(tableCopyproject_id, '.', tableCopydataset_id, '.', tableCopytable_id) 
-    AS tableCopyDestinationTableAbsolutePath,
-  --IF(eventName = "jobChange", 1, 0) AS numCopies,
-  /* This code queries data specific to the Copy operation */ /* The following code queries data specific to the Load operation in BQ */ totalLoadOutputBytes,
-  (totalLoadOutputBytes / 1000000000) AS totalLoadOutputGigabytes,
-  (totalLoadOutputBytes / 1000000000) / 1000 AS totalLoadOutputTerabytes,
-  /* loadConfig STRUCT */
-  STRUCT(
-    loadsourceUris,
-    loadsourceUrisTruncated,
-    loadcreateDisposition,
-    loadwriteDisposition,
-    loadschemaJson,
-    loadschemaJsonTruncated,
-    loadDestinationTable,
-    STRUCT(
-      loadKmskeyName
-    ) AS destinationTableEncryption
-  ) AS loadConfig,
-  IF(eventName = "jobChange", 1, 0) AS numLoads,
-  /* This ends the code snippet that queries columns specific to the Load operation in BQ */ 
-  /* The following code queries data specific to the Extract operation in BQ */ 
-  REGEXP_CONTAINS( jobId, 'beam') AS isBeamJob,
-  /*queryConfig STRUCT */
-  STRUCT(
-    query,
-    queryTruncated,
-    querycreateDisposition,
-    querywriteDisposition,
-    queryschemaJson,
-    queryschemaJsonTruncated,
-    querydestTable_project_id,
-    querydestTable_dataset_id,
-    querydestTable_table_id,
-    queryPriority,
-    querydefaultDataset,
-    STRUCT(
-      queryKmskeyName
-    ) AS destinationTableEncryption
-  ) AS queryConfig,
-  /* extractConfig STRUCT*/
-  STRUCT(
-    extractdestinationUris,
-    extractdestinationUrisTruncated,
-    STRUCT(
-      extract_projectid,
-      extract_datasetid,
-      extract_tableid,
-      CONCAT(extract_datasetid, '.', extract_tableid) AS relativeTableRef,
-      CONCAT(extract_projectid, '.', extract_datasetid, '.', extract_tableid) AS absoluteTableRef
-    ) AS sourceTable
-  ) AS extractConfig,
-  IF(eventName = "jobChange", 1, 0) AS numExtracts,
-  /* This ends the code snippet that 
- columns specific to the Extract operation in BQ */ /* The following code queries data specific to the Query operation in BQ */ REGEXP_CONTAINS(
-    query, 'cloudaudit_googleapis_com_data_access'
-  ) AS isAuditDashboardQuery,
-  /*tableCopyConfig STRUCT*/
-  STRUCT(
-    tableCopysourceTables,
-    tableCopysourceTablesTruncated,
-    tableCopycreateDisposition,
-    tableCopywriteDisposition,
-    STRUCT(
-      tableCopyproject_id,
-      tableCopydataset_id,
-      tableCopytable_id,
-      CONCAT(tableCopydataset_id, '.', tableCopytable_id) AS relativeTableRef,
-      CONCAT(tableCopyproject_id, '.', tableCopydataset_id, '.', tableCopytable_id) AS absoluteTableRef
-    ) AS destinationTable,
-    STRUCT(
-      tableCopykmsKeyname
-    ) AS destinationTableEncryption
-  ) AS tableCopyConfig,
-  /*JobStatus STRUCT*/
-  STRUCT(
-    jobState,
-    STRUCT (
-      errorResultCode,
-      errorResultMessage,
-      errorResultDetails
-    ) as errorResult,
-    STRUCT (
-      errorCode,
-      errorMessage
-    ) as error
-  ) as JobStatus,
-  name,
-  slotMs,
   cacheHit,
-  referencedRoutines,
- /*JobStats STRUCT */
-  STRUCT(
-    createTime,
-    startTime,
-    endTime,
-    totalSlotMs,
-    STRUCT(
-      name,
-      slotMs
-    ) as reservationUsage,
-    STRUCT (
-      totalProcessedBytes,
-      totalBilledBytes,
-      billingTier,
-      referencedViews,
-      referencedTables,
-      referencedRoutines,
-      cacheHit,
-      outputRowCount
-    ) as queryStats,
-    STRUCT (
-      totalLoadOutputBytes
-    ) as loadStats
-  ) as jobStats,
+  REGEXP_CONTAINS(jobId, 'beam') AS isBeamJob,
+  REGEXP_CONTAINS(query, 'cloudaudit_googleapis_com_data_access') AS isAuditDashboardQuery,
   errorCode IS NOT NULL AS isError,
   totalSlotMs,
   totalSlotMs / runtimeMs AS avgSlots,
-  /* The following statement breaks down the query into minute buckets
+  /*
+   * The following statement breaks down the query into minute buckets
    * and provides the average slot usage within that minute. This is a
    * crude way of making it so you can retrieve the average slot utilization
    * for a particular minute across multiple queries.
-   */ ARRAY(
+   */
+  ARRAY(
     SELECT
       STRUCT(
         TIMESTAMP_TRUNC(
@@ -1159,21 +966,179 @@ SELECT
   CONCAT(querydestTable_project_id, '.', querydestTable_dataset_id, '.', querydestTable_table_id) AS queryDestinationTableAbsolutePath,
   referencedViews,
   referencedTables,
-  refTable_project_id,
-  refTable_dataset_id,
-  refTable_table_id,
-  refView_project_id,
-  refView_dataset_id,
-  refView_table_id,
+  referencedRoutines,
+  /*
+   * Load job statistics
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#load_1
+  */
+  loadStatsTotalOutputBytes AS totalLoadOutputBytes,
+  (loadStatsTotalOutputBytes / pow(2,30)) AS totalLoadOutputGigabytes,
+  (loadStatsTotalOutputBytes / pow(2,40)) AS totalLoadOutputTerabytes,
+  /*
+   * loadConfig STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#load
+   */
+  STRUCT(
+    loadsourceUris,
+    loadsourceUrisTruncated,
+    loadcreateDisposition,
+    loadwriteDisposition,
+    loadschemaJson,
+    loadschemaJsonTruncated,
+    loadDestinationTable,
+    STRUCT(
+      loadKmskeyName
+    ) AS destinationTableEncryption
+  ) AS loadConfig,
+  /*
+   * queryConfig STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#query
+   */
+  STRUCT(
+    query,
+    queryTruncated,
+    querycreateDisposition,
+    querywriteDisposition,
+    queryschemaJson,
+    queryschemaJsonTruncated,
+    querydestTable_project_id,
+    querydestTable_dataset_id,
+    querydestTable_table_id,
+    queryPriority,
+    querydefaultDataset,
+    STRUCT(queryKmskeyName AS kmsKeyName) AS destinationTableEncryption
+  ) AS queryConfig,
+  /*
+   * extractConfig STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#extract
+   */
+  STRUCT(
+    extractdestinationUris,
+    extractdestinationUrisTruncated,
+    STRUCT(
+      extract_projectid,
+      extract_datasetid,
+      extract_tableid,
+      CONCAT(extract_datasetid, '.', extract_tableid) AS relativeTableRef,
+      CONCAT(extract_projectid, '.', extract_datasetid, '.', extract_tableid) AS absoluteTableRef
+    ) AS sourceTable
+  ) AS extractConfig,
+  /*
+   * tableCopyConfig STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#tablecopy
+   */
+  STRUCT(
+    tableCopysourceTables,
+    tableCopysourceTablesTruncated,
+    tableCopycreateDisposition,
+    tableCopywriteDisposition,
+    STRUCT(
+      tableCopyproject_id,
+      tableCopydataset_id,
+      tableCopytable_id,
+      CONCAT(tableCopydataset_id, '.', tableCopytable_id) AS relativeTableRef,
+      CONCAT(tableCopyproject_id, '.', tableCopydataset_id, '.', tableCopytable_id) AS absoluteTableRef
+    ) AS destinationTable,
+    STRUCT(
+      tableCopykmsKeyname
+    ) AS destinationTableEncryption
+  ) AS tableCopyConfig,
+  /*
+   * JobStatus STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#JobStatus
+   */
+  STRUCT(
+    jobState,
+    STRUCT (
+      errorResultCode,
+      errorResultMessage,
+      errorResultDetails
+    ) AS errorResult,
+    STRUCT (
+      errorCode,
+      errorMessage
+    ) AS error
+  ) AS JobStatus,
+  /*
+   * JobStats STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#jobstats
+   */
+  STRUCT(
+    createTime,
+    startTime,
+    endTime,
+    totalSlotMs,
+    STRUCT(reservationUsageName AS name, reservationUsageSlotMs AS slotMs) AS reservationUsage,
+    STRUCT (
+      totalProcessedBytes,
+      totalBilledBytes,
+      billingTier,
+      referencedViews,
+      referencedTables,
+      referencedRoutines,
+      cacheHit,
+      outputRowCount
+    ) AS queryStats,
+    STRUCT (
+      loadStatsTotalOutputBytes AS totalOutputBytes
+    ) AS loadStats
+  ) AS jobStats,
+  /*
+   * ModelDeletion STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modeldeletion
+   */
+   STRUCT(
+     modelDeletionReason AS reason
+   ) AS modelDeletion,
+   /*
+   * ModelCreation STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modelcreation
+   */
+   STRUCT(
+     modelCreationReason AS reason,
+     STRUCT(
+       modelCreationModelName AS modelName,
+       STRUCT(
+         modelCreationEntityInfoFriendlyName AS friendlyName,
+         modelCreationEntityInfoDescription AS description,
+         modelCreationEntityInfoLabels AS labels
+       ) AS entityInfo,
+       modelCreationModelExpireTime AS expireTime,
+       modelCreationModelCreateTime AS createTime,
+       modelCreationModelUpdateTime AS updateTime,
+       STRUCT(modelCreationEncryptionKmsKeyName AS kmsKeyName) AS encryptionInfo
+     ) AS model
+   ) AS modelCreation,
+   /*
+   * ModelMetadataChange STRUCT
+   * https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata#modelmetadatachange
+   */
+   STRUCT(
+     modelMetadataChangeReason AS reason,
+     STRUCT(
+       modelMetadataChangeModelName AS modelName,
+       STRUCT(
+         modelMetadataChangeEntityInfoFriendlyName AS friendlyName,
+         modelMetadataChangeEntityInfoDescription AS description,
+         modelMetadataChangeEntityInfoLabels AS labels
+       ) AS entityInfo,
+       modelMetadataChangeModelExpireTime AS expireTime,
+       modelMetadataChangeModelCreateTime AS createTime,
+       modelMetadataChangeModelUpdateTime AS updateTime,
+       STRUCT(modelMetadataChangeEncryptionKmsKeyName AS kmsKeyName) AS encryptionInfo
+     ) AS model
+   ) AS modelMetadataChange
+
 FROM query_audit
-LEFT JOIN data_audit ON data_jobid = jobId
-LEFT JOIN table_audit ON jobid = table_jobid
-LEFT JOIN tableDeletion_audit on table_jobid = tableDeletion_jobid
-LEFT JOIN tableDataRead_audit on tableDeletion_jobid=tableDataRead_jobid
-LEFT JOIN modelDeletion_audit on tableDataRead_jobid = modelDeletion_jobid
-LEFT JOIN model_audit on  modelDeletion_jobid = model_jobid
-LEFT JOIN modelDataChange_audit on  model_jobid = modelDataChange_jobid
-LEFT JOIN routine_audit on  modelDataChange_jobid = routine_jobid
+LEFT JOIN data_audit USING(jobId)
+LEFT JOIN table_audit USING(jobId)
+LEFT JOIN tableDeletion_audit USING(jobId)
+LEFT JOIN tableDataRead_audit USING(jobId)
+LEFT JOIN modelDeletion_audit USING(jobId)
+LEFT JOIN modelMetadataChange_audit USING(jobId)
+LEFT JOIN modelCreation_audit USING(jobId)
+LEFT JOIN modelDataChange_audit USING(jobId)
+LEFT JOIN routine_audit USING(jobId)
 WHERE
   statementType = "SCRIPT"
   OR jobChangeAfter = "DONE"
