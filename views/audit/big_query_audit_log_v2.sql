@@ -2,8 +2,8 @@
  * Script: BQ Audit Version 2
  * Author: NamrataShah5, danieldeleo
  * Description:
- * This SQL Script creates a materialized source table based on the newer BigQueryAuditMetadata
- * stackdriver logs. This script acts AS input to the Dashboard.
+ * This SQL Script aggregates BigQuery job events based on
+ * the newer BigQueryAuditMetadata Stackdriver logs.
  * Reference for BigQueryAuditMetadata: https://cloud.google.com/bigquery/docs/reference/auditlogs/rest/Shared.Types/BigQueryAuditMetadata
  */
 
